@@ -72,7 +72,7 @@ def run_ga(fobj, lb, ub, dim, pop_size=50, generations=100, mutation_rate=0.1, c
         population = xp.array(new_population)
     # 若使用 GPU，则将最佳解转换为 numpy 数组后返回
     if use_gpu and cp is not None:
-        best = np.array(best)
+        best = best.get()  # 修改：显式使用 .get() 进行转换
     return best, best_fitness
 
 if __name__ == '__main__':
