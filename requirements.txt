@@ -1,2 +1,0 @@
-cupy(能用gpu跑的话)
-numpy < 2.0
