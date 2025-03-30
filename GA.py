@@ -1,47 +1,49 @@
 import numpy as np
 import random
-import json  # 新增，用于写入结果文件
+import os
 from test import get_function_details
 
+
 def ga_optimize(func, lb, ub, dim, npop, cr, mr, max_evals):
-    # 初始化种群
     population = np.random.uniform(lb, ub, (npop, dim))
     fitness = np.array([func(ind) for ind in population])
     eval_count = npop
     best_idx = np.argmin(fitness)
     best = population[best_idx].copy()
     best_fitness = fitness[best_idx]
-    
+
+    convergence_curve = [best_fitness]  # 记录初始适应度
+    interval = max_evals // 30
+    checkpoints = list(range(interval, max_evals + 1, interval))[:30]
+    checkpoint_idx = 0
+
     while eval_count < max_evals:
         new_population = []
         new_fitness = []
         for i in range(npop):
-            # 锦标赛选择获得两个父代并缓存父代适应度
+            # 锦标赛选择
             idxs = random.sample(range(npop), 2)
-            if fitness[idxs[0]] <= fitness[idxs[1]]:
-                parent1 = population[idxs[0]].copy()
-                p1_fitness = fitness[idxs[0]]
-            else:
-                parent1 = population[idxs[1]].copy()
-                p1_fitness = fitness[idxs[1]]
+            parent1 = population[idxs[0]] if fitness[idxs[0]] < fitness[idxs[1]] else population[idxs[1]]
+            p1_fitness = fitness[idxs[0]] if fitness[idxs[0]] < fitness[idxs[1]] else fitness[idxs[1]]
+
             idxs = random.sample(range(npop), 2)
-            if fitness[idxs[0]] <= fitness[idxs[1]]:
-                parent2 = population[idxs[0]].copy()
-            else:
-                parent2 = population[idxs[1]].copy()
-            
-            # 均匀交叉（采用向量化操作）
+            parent2 = population[idxs[0]] if fitness[idxs[0]] < fitness[idxs[1]] else population[idxs[1]]
+
+            # 交叉和变异
             mask = np.random.rand(dim) < cr
             child = np.where(mask, parent1, parent2)
-            
-            # 向量化变异：每个基因以 mr 概率重新随机生成
             mutation_mask = np.random.rand(dim) < mr
             child[mutation_mask] = np.random.uniform(lb, ub, np.sum(mutation_mask))
-            
+
             child_fitness = func(child)
             eval_count += 1
-            
-            # 选择较优个体进入新种群
+
+            # 记录收敛过程
+            while checkpoint_idx < len(checkpoints) and eval_count >= checkpoints[checkpoint_idx]:
+                convergence_curve.append(best_fitness)
+                checkpoint_idx += 1
+
+            # 更新种群
             if child_fitness < p1_fitness:
                 new_population.append(child)
                 new_fitness.append(child_fitness)
@@ -51,35 +53,44 @@ def ga_optimize(func, lb, ub, dim, npop, cr, mr, max_evals):
             else:
                 new_population.append(parent1)
                 new_fitness.append(p1_fitness)
+
         population = np.array(new_population)
         fitness = np.array(new_fitness)
-    return best, best_fitness, eval_count
 
-def run_benchmark():
+    # 填充剩余检查点
+    while len(convergence_curve) < 30:
+        convergence_curve.append(best_fitness)
+    return best, best_fitness, eval_count, convergence_curve[:30]
+
+
+def run_benchmark(repeat_times=5):
     functions = ['F' + str(i) for i in range(1, 14)]
-    results = {}
-    log_lines = []
-    # 遍历所有参数组合：NP、CR、MR
-    for npop in range(20, 101, 20):
-        for cr_multiplier in range(1, 10):
-            cr = cr_multiplier * 0.1
-            for mr_multiplier in range(1, 10):
-                mr = mr_multiplier * 0.01
-                param_key = f"NP={npop}, CR={cr:.1f}, MR={mr:.2f}"
-                results[param_key] = {}
-                for f_name in functions:
-                    lb, ub, dim, func = get_function_details(f_name)
-                    max_evals = 10000 * dim
-                    best, best_fitness, evals = ga_optimize(func, lb, ub, dim, npop, cr, mr, max_evals)
-                    results[param_key][f_name] = best_fitness
-                    line = f"{param_key} on Function {f_name}, Best Fitness: {best_fitness:.4e}"
-                    print(line)
-                    log_lines.append(line)
-    # 将所有结果写入结果文件
-    with open("d:\\pycharm_code\\results.txt", "w") as f:
-        for line in log_lines:
-            f.write(line + "\n")
-    return results
+    results_dir = "results"
+    os.makedirs(results_dir, exist_ok=True)
+
+    for f_name in functions:
+        # 获取函数详情
+        lb, ub, dim, func = get_function_details(f_name)
+        max_evals = 10000 * dim
+
+        # 遍历所有参数组合
+        for npop in range(20, 101, 20):
+            for cr_i in range(1, 10):
+                cr = cr_i * 0.1
+                for mr_i in range(1, 10):
+                    mr = mr_i * 0.01
+                    param_key = f"NP={npop}_CR={cr:.1f}_MR={mr:.2f}"
+                    results_file = os.path.join(results_dir, f"{f_name}_{param_key}.txt")
+
+                    # 运行多次实验并写入结果
+                    with open(results_file, 'w') as f:
+                        for run in range(repeat_times):
+                            _, _, _, curve = ga_optimize(func, lb, ub, dim, npop, cr, mr, max_evals)
+                            line = ' '.join(f"{val:.4e}" for val in curve)
+                            f.write(line + '\n')
+
+    print("Benchmark completed. Results saved in the 'results' folder.")
+
 
 if __name__ == "__main__":
-    run_benchmark()
+    run_benchmark(repeat_times=5)
