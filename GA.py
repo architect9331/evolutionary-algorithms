@@ -68,6 +68,9 @@ def run_benchmark(repeat_times=5):
     results_dir = "results"
     os.makedirs(results_dir, exist_ok=True)
 
+    total_tasks = len(functions) * (len(range(20, 101, 20)) * len(range(1, 10)) * len(range(1, 10))) * repeat_times
+    completed_tasks = 0
+
     for f_name in functions:
         # 获取函数详情
         lb, ub, dim, func = get_function_details(f_name)
@@ -88,6 +91,11 @@ def run_benchmark(repeat_times=5):
                             _, _, _, curve = ga_optimize(func, lb, ub, dim, npop, cr, mr, max_evals)
                             line = ' '.join(f"{val:.4e}" for val in curve)
                             f.write(line + '\n')
+
+                            # 更新进度
+                            completed_tasks += 1
+                            progress = (completed_tasks / total_tasks) * 100
+                            print(f"Progress: {progress:.2f}% | Function: {f_name} | Params: {param_key} | Run: {run + 1}/{repeat_times}")
 
     print("Benchmark completed. Results saved in the 'results' folder.")
 
